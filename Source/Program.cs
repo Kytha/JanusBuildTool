@@ -2,7 +2,7 @@
 
 using System;
 using System.Diagnostics;
-
+using System.IO;
 namespace JanusBuildTool
 {
     class Program
@@ -15,8 +15,13 @@ namespace JanusBuildTool
             }
             Stopwatch stopwatch = Stopwatch.StartNew();
             CommandLine.Configure(typeof(Configuration));
+            Global.Root = Directory.GetCurrentDirectory();
+            Project.Load(Global.Root);
             try {
-
+                if(Configuration.build)
+                {
+                    Builder.Build();
+                }
             } catch (Exception ex)
             {
                 Console.Write(ex.ToString());

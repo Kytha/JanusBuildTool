@@ -8,7 +8,8 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>JanusBuildTool</RootNamespace>
     <AssemblyName>JanusBuildTool</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <LangVersion>8</LangVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
@@ -57,7 +58,16 @@
   <ItemGroup>
     <Compile Include="CommandLine.cs" />
     <Compile Include="Configuration.cs" />
+    <Compile Include="Globals.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="Build\Builder.cs" />
+    <Compile Include="Build\Module.cs" />
+    <Compile Include="Build\Toolchain.cs" />
+    <Compile Include="Build\BuildOptions.cs" />
+    <Compile Include="Build\Platform.cs" />
+    <Compile Include="Platform\WindowsPlatform.cs" />
+    <Compile Include="Platform\WindowsToolchain.cs" />
+    <Compile Include="Project.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

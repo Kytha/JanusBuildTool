@@ -6,7 +6,7 @@ setlocal
 pushd
 echo Generating Janus Engine project files...
 
-call "Scripts\Windows\CallBuildTool.bat" -genProject -platforms=Windows,Linux,MacOS %*
+call "Scripts\Windows\CallBuildTool.bat" -build -platforms=Windows,Linux,MacOS %*
 if errorlevel 1 goto BuildToolFailed
 
 popd

@@ -15,6 +15,9 @@ namespace JanusBuildTool
 
         [CommandLine("timestamps", "Includes timestamping in log" )]
         public static bool Timestamps = true;
+        
+        [CommandLine("build", "Builds project" )]
+        public static bool build = true;
 
         [CommandLine("buildPlatforms", "Windows,Linux","Specifies the platforms to build for" )]
         public static string[] BuildPlatforms;

@@ -7,6 +7,7 @@ if not exist "Scripts\Windows\GetMSBuildPath.bat" goto Error_InvalidLocation
 call "Scripts\Windows\GetMSBuildPath.bat"
 if errorlevel 1 goto Error_NoVisualStudioEnvironment
 
+echo %MSBUILD_PATH%
 if not exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" goto Compile
 for /f "delims=" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath') do (
 	for %%j in (15.0, Current) do (

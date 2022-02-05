@@ -1,0 +1,12 @@
+// Copyright (c) Kyle Thatcher. All rights reserved.
+
+using System;
+using JanusBuildTool;
+
+class Core : Module
+{
+    public override void Init(BuildOptions options)
+    {
+        Console.WriteLine("THIS IS CORE");
+    }
+}
