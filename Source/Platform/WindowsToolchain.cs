@@ -1,3 +1,5 @@
+// Copyright (c) Kyle Thatcher. All rights reserved.
+
 using System;
 using System.IO;
 using System.Collections.Generic;
