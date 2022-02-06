@@ -57,17 +57,23 @@ namespace JanusBuildTool {
         {
             base.SetupEnvironment(options);
 
-            options.PreprocessorDefinitions.Add("PLATFORM_WINDOWS");
+            options.CompileEnv.PreprocessorDefinitions.Add("PLATFORM_WINDOWS");
+            options.CompileEnv.PreprocessorDefinitions.Add("WIN64");
+            options.CompileEnv.PreprocessorDefinitions.Add("PLATFORM_WIN32");
+            options.CompileEnv.PreprocessorDefinitions.Add("WIN32");
+            options.CompileEnv.PreprocessorDefinitions.Add("_CRT_SECURE_NO_DEPRECATE");
+            options.CompileEnv.PreprocessorDefinitions.Add("_CRT_SECURE_NO_WARNINGS");
+            options.CompileEnv.PreprocessorDefinitions.Add("_WINDOWS");
 
-            options.InputLibraries.Add("dwmapi.lib");
-            options.InputLibraries.Add("kernel32.lib");
-            options.InputLibraries.Add("user32.lib");
-            options.InputLibraries.Add("comdlg32.lib");
-            options.InputLibraries.Add("advapi32.lib");
-            options.InputLibraries.Add("shell32.lib");
-            options.InputLibraries.Add("ole32.lib");
-            options.InputLibraries.Add("oleaut32.lib");
-            options.InputLibraries.Add("delayimp.lib");
+            options.LinkEnv.InputLibraries.Add("dwmapi.lib");
+            options.LinkEnv.InputLibraries.Add("kernel32.lib");
+            options.LinkEnv.InputLibraries.Add("user32.lib");
+            options.LinkEnv.InputLibraries.Add("comdlg32.lib");
+            options.LinkEnv.InputLibraries.Add("advapi32.lib");
+            options.LinkEnv.InputLibraries.Add("shell32.lib");
+            options.LinkEnv.InputLibraries.Add("ole32.lib");
+            options.LinkEnv.InputLibraries.Add("oleaut32.lib");
+            options.LinkEnv.InputLibraries.Add("delayimp.lib");
 
         }
 
@@ -81,35 +87,46 @@ namespace JanusBuildTool {
 
         }
 
-        public override bool CompileCPP(BuildOptions buildOptions) 
+        public override CompileOutput CompileCPP(BuildOptions buildOptions, List<string> cppFiles) 
         {
-            buildOptions.args.Clear();
-            buildOptions.CompilerPath = _compilerPath;
 
-            foreach(string file in buildOptions.SourceFiles) {
+            var compileEnvironment = buildOptions.CompileEnv;
+            var output = new CompileOutput();
 
+            var commonArgs = new List<string>();
+            commonArgs.Add("/nologo");
+            commonArgs.Add("/c");
+            commonArgs.Add("/EHsc");
+
+            foreach (var definition in compileEnvironment.PreprocessorDefinitions)
+            {
+                commonArgs.Add(string.Format("/D \"{0}\"", definition));
+            }
+            
+            foreach (var includePath in compileEnvironment.IncludePaths)
+            {
+                commonArgs.Add($"/I\"{includePath}\"");
+            }
+
+            var args = new List<string>();
+            foreach(string file in cppFiles) {
+                args.Clear();
+                args.AddRange(commonArgs);
                 var sourceFilename = Path.GetFileNameWithoutExtension(file);
 
-                buildOptions.args.Add("/nologo");
-                buildOptions.args.Add("/c");
-                buildOptions.args.Add("/EHsc");
-                foreach(var includePath in buildOptions.IncludePaths)
-                {
-                    buildOptions.args.Add($"/I\"{includePath}\"");
-                }
+                var objFile = Path.Combine(buildOptions.IntermediateFolder, sourceFilename + ".obj");
+                args.Add($"/Fo\"{objFile}\"");
+                args.Add($"\"{file}\""); 
 
-                var objFile = Path.Combine(Global.Root, sourceFilename + ".obj");
-                buildOptions.args.Add($"/Fo\"{objFile}\"");
-                buildOptions.args.Add($"\"{file}\""); 
-
-                string CommandArguments = string.Join(" ", buildOptions.args);
+                string CommandArguments = string.Join(" ", args);
                 Console.WriteLine(CommandArguments);
+                Console.WriteLine("\n\n");
 
 
                 var startInfo = new ProcessStartInfo
                 {
-                    WorkingDirectory = Global.Root,
-                    FileName = buildOptions.CompilerPath,
+                    WorkingDirectory = buildOptions.WorkingDirectory,
+                    FileName = _compilerPath,
                     Arguments = CommandArguments,
                     UseShellExecute = false,
                     RedirectStandardInput = false,
@@ -134,22 +151,95 @@ namespace JanusBuildTool {
                     catch(Exception ex)
                     {
                         Console.WriteLine("Failed to start local process for task");
-                        Console.WriteLine($"{ex.Message}");
-                        return false; 
+                        Console.WriteLine($"{ex.Message}"); 
                     }
                     process.WaitForExit();
                 }
                 finally
                 {
+                    output.ObjectFiles.Add(objFile);
                     process?.Close();
                 }
             }
-            return true;
+            return output;
         }
 
-        public override bool LinkCPP()
+        public override bool LinkCPP(BuildData targetBuildData, BuildOptions buildOptions, string outputFilePath)
         {
-            return false;
+
+            var linkEnvironment = buildOptions.LinkEnv;
+            Directory.CreateDirectory(Path.GetDirectoryName(outputFilePath));
+            var args = new List<string>();
+
+            args.Add("/NOLOGO");
+            args.Add("/ERRORREPORT:PROMPT");
+
+            args.Add($"/OUT:\"{outputFilePath}\"");
+            args.Add("/MACHINE:x64");
+            args.Add("/SUBSYSTEM:CONSOLE");
+
+            args.Add("/MANIFEST:NO");
+            
+                    // Fixed Base Address
+            args.Add("/FIXED:NO");
+            
+            // Additional lib paths
+            foreach (var libpath in linkEnvironment.LibraryPaths)
+            {
+                args.Add($"/LIBPATH:\"{libpath}\"");
+            }
+
+            // Input libraries
+            foreach (var library in linkEnvironment.InputLibraries)
+            {
+                args.Add($"\"{library}\"");
+            }
+
+            // Input files
+            foreach (var file in linkEnvironment.InputFiles)
+            {
+                args.Add($"\"{file}\"");
+            }
+
+            string CommandArguments = string.Join(" ", args);
+            var startInfo = new ProcessStartInfo
+            {
+                WorkingDirectory = buildOptions.WorkingDirectory,
+                FileName = _linkerPath,
+                Arguments = CommandArguments,
+                UseShellExecute = false,
+                RedirectStandardInput = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+
+            Process process = null;
+            try
+            {
+                try
+                {
+                    process = new Process();
+                    process.StartInfo = startInfo;
+                    process.OutputDataReceived += ProcessDebugOutput;
+                    process.ErrorDataReceived += ProcessDebugOutput;
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+                }
+                catch(Exception ex)
+                {
+                    Console.WriteLine("Failed to start local process for task");
+                    Console.WriteLine($"{ex.Message}");
+                    return false; 
+                }
+                process.WaitForExit();
+            }
+            finally
+            {
+                process?.Close();
+            }
+            return true;
         }
 
         private static void ProcessDebugOutput(object sender, DataReceivedEventArgs e)

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -56,6 +56,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Utilities.cs" />
     <Compile Include="CommandLine.cs" />
     <Compile Include="Configuration.cs" />
     <Compile Include="Globals.cs" />
@@ -65,9 +66,18 @@
     <Compile Include="Build\Toolchain.cs" />
     <Compile Include="Build\BuildOptions.cs" />
     <Compile Include="Build\Platform.cs" />
+    <Compile Include="Build\Target.cs" />
+    <Compile Include="Build\BuildData.cs" />
+    <Compile Include="Build\GameTarget.cs" />
+    <Compile Include="Build\GameModule.cs" />
+    <Compile Include="Build\Rules.cs" />
+    <Compile Include="Build\LinkEnv.cs" />
+    <Compile Include="Build\CompileOutput.cs" />
+    <Compile Include="Build\CompileEnv.cs" />
+    <Compile Include="Build\ProjectTarget.cs" />
     <Compile Include="Platform\WindowsPlatform.cs" />
     <Compile Include="Platform\WindowsToolchain.cs" />
-    <Compile Include="Project.cs" />
+    <Compile Include="ProjectInfo.cs" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

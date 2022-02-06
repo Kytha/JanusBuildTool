@@ -7,10 +7,9 @@ using JanusBuildTool;
 
 public class Audio : Module
 {
-    public override void Init(BuildOptions options)
+    public override void SetUp(BuildOptions options)
     {
         Console.WriteLine("THIS IS AUDIO");
-        options.SourceFiles.Add(Path.Combine(FolderPath, "Audio.cpp"));
 
     }
 }

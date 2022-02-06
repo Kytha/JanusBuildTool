@@ -1,10 +1,15 @@
 {
-  "Name": "Janus",
+  "Name": "MyGame",
   "Version": {
     "Major": 1,
     "Minor": 0,
     "Build": 0
   },
+    "References": [
+        {
+            "Name": "$(EnginePath)/Janus.janusproj"
+        }
+    ],
   "Company": "Janus",
   "Copyright": "Copyright (c) 2022-2032 Kyle Thatcher. All rights reserved.",
 }

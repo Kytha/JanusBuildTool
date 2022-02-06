@@ -3,6 +3,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+
 namespace JanusBuildTool
 {
     class Program
@@ -15,8 +16,14 @@ namespace JanusBuildTool
             }
             Stopwatch stopwatch = Stopwatch.StartNew();
             CommandLine.Configure(typeof(Configuration));
+            var executingAssembly = System.Reflection.Assembly.GetExecutingAssembly();
+            Global.EngineRoot = Utilities.RemovePathRelativeParts(Path.Combine(Path.GetDirectoryName(executingAssembly.Location), ".."));
             Global.Root = Directory.GetCurrentDirectory();
-            Project.Load(Global.Root);
+
+            var projectFiles = Directory.GetFiles(Global.Root, "*.janusproj", SearchOption.TopDirectoryOnly);
+            if (projectFiles.Length == 1)
+                Global.project = ProjectInfo.Load(projectFiles[0]);
+
             try {
                 if(Configuration.build)
                 {

@@ -21,8 +21,8 @@ namespace JanusBuildTool
         }
         public virtual void SetupEnvironment(BuildOptions options)
         {
-            options.IncludePaths.AddRange(SystemIncludePaths);
-            options.LibraryPaths.AddRange(SystemLibraryPaths);
+            options.CompileEnv.IncludePaths.AddRange(SystemIncludePaths);
+            options.LinkEnv.LibraryPaths.AddRange(SystemLibraryPaths);
         }
 
         public virtual void PreBuild(BuildOptions buildOptions)
@@ -35,9 +35,9 @@ namespace JanusBuildTool
 
         }
 
-        public abstract bool CompileCPP(BuildOptions buildOptions);
+        public abstract CompileOutput CompileCPP(BuildOptions buildOptions, List<string> cppFiles);
 
-        public abstract bool LinkCPP();
+        public abstract bool LinkCPP(BuildData targetBuildData, BuildOptions buildOptions, string outputFilePath);
 
     }
 }

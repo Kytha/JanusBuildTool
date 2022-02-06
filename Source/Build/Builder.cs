@@ -1,123 +1,230 @@
 // Copyright (c) Kyle Thatcher. All rights reserved.
-
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
-using System.CodeDom.Compiler;
-using System.Linq;
-using System.Threading;
-using System.Diagnostics;
+
 
 namespace JanusBuildTool {
 
     class Builder {
 
-        public static readonly Assembly[] DefaultReferences =
-        {
-            typeof(Enumerable).Assembly, // System.Linq.dll
-            typeof(ISet<>).Assembly, // System.dll
-            typeof(Builder).Assembly, // Flax.Build.exe
-        };
-
         public static int Build() 
         {
-            BuildOptions buildOptions = new BuildOptions();
-            var files = GetProjectBuildFiles();
-            Assembly assembly;
-            Dictionary<string, string> providerOptions = new Dictionary<string, string>();
-            providerOptions.Add("CompilerVersion", "v4.0");
-            CodeDomProvider provider = new Microsoft.CSharp.CSharpCodeProvider(providerOptions);
 
-            HashSet<string> references = new HashSet<string>();
-            foreach (var defaultReference in DefaultReferences)
-                references.Add(defaultReference.Location);
+            var rules = Rules.GenerateRules();
 
-
-            CompilerParameters cp = new CompilerParameters();
-            cp.GenerateExecutable = false;
-            cp.WarningLevel = 4;
-            cp.TreatWarningsAsErrors = false;
-            cp.ReferencedAssemblies.AddRange(references.ToArray());
-            cp.GenerateInMemory = true;
-
-            CompilerResults cr = provider.CompileAssemblyFromFile(cp, files.ToArray());
-
-            bool hasError = false;
-            foreach (CompilerError ce in cr.Errors)
+            foreach(var target in rules.targets)
             {
-                if (ce.IsWarning)
+                foreach(PlatformType platformType in target.Platforms)
                 {
-                    Console.WriteLine(string.Format("{0} at {1}: {2}", ce.FileName, ce.Line, ce.ErrorText));
-                }
-                else
-                {
-                    Console.WriteLine(string.Format("{0} at line {1}: {2}", ce.FileName, ce.Line, ce.ErrorText));
-                    hasError = true;
-                }
-            }
-            if (hasError)
-                throw new Exception("Failed to build assembly.");
-            assembly = cr.CompiledAssembly;
-            
-            
-            
-            foreach(Type type in assembly.GetTypes())
-            {
-                if(type.IsAbstract | !type.IsClass)
-                    continue;
-                if(type.IsSubclassOf(typeof(Module)))
-                {
-                    var module = (Module)Activator.CreateInstance(type);
-                    var moduleFilename = module.Name + ".Build.cs";
-                    module.FilePath = files.FirstOrDefault(path => string.Equals(Path.GetFileName(path), moduleFilename, StringComparison.OrdinalIgnoreCase));
-                    if (module.FilePath == null)
+                    foreach(Architecture architecture in target.Architectures)
                     {
-                        throw new Exception(string.Format("Failed to find source file path for {0}", module));
+                        foreach(ConfigurationType configurationType in target.Configurations)
+                        {
+                            var platform = Platform.GetPlatform(platformType);
+                            var toolchain = platform.GetToolchain(architecture);
+                            var buildContext = new Dictionary<Target, BuildData>();
+                            BuildTargetNativeCpp(rules, target, toolchain, configurationType, buildContext);
+                        }
                     }
-                    module.FolderPath = Path.GetDirectoryName(module.FilePath);
-                    module.Init(buildOptions);
                 }
             }
-
-            var toolchain = Platform.NativePlatform.GetToolchain(Architecture.x64);
 
             //string vcToolPath = "C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/VC/Tools/MSVC/14.28.29910";
             //string compilerPath = Path.Combine(vcToolPath, "bin","Hostx64","x64", "cl.exe");
             //string platformInclude = Path.Combine(vcToolPath, "include");
-
-
-            toolchain.SetupEnvironment(buildOptions);
-            toolchain.CompileCPP(buildOptions);
-            
             return 0;
         }
-        private static List<string> GetProjectBuildFiles()
-        {
-            var files = new List<string>();
-            var sources = Path.Combine(Global.Root, "src");
-            if(Directory.Exists(sources))
-            {   
-                FindBuildFiles(sources, files);
-            }
-            return files;
-        }
 
-        private static void FindBuildFiles(string directory, List<string> result)
+        private static void BuildTargetNativeCpp(Rules rules, Target target, Toolchain toolchain, ConfigurationType configuration, Dictionary<Target, BuildData> buildContext) 
         {
-            string[] files = Directory.GetFiles(directory);
-            foreach(string f in files)
+            var project = Global.project;
+
+            var targetBuildOptions = Rules.GetBuildOptions(target, toolchain, toolchain.platform, toolchain.architecture, configuration, project.ProjectFolderPath);
+            var buildData = new BuildData
             {
-                if(f.EndsWith("Build.cs")) {
-                    result.Add(f);
+                Project = project,
+                Platform = toolchain.platform,
+                Toolchain = toolchain,
+                Architecture = toolchain.architecture,
+                ConfigurationType = configuration,
+                Target = target,
+                TargetOptions = targetBuildOptions,
+                Rules = rules
+            };
+            buildContext.Add(target, buildData);
+
+            /*
+            foreach(string moduleName in target.Modules)
+            {
+                moduleLookup.TryGetValue(moduleName, out var module);
+                if(module == null)
+                    throw new Exception($"Could not find module {moduleName}");
+                module.SetUp(buildOptions);
+                toolchain.CompileCPP(buildOptions);
+            }
+            toolchain.LinkCPP(buildOptions);
+            */
+
+            foreach (var moduleName in target.Modules)
+            {
+                var module = rules.GetModule(moduleName);
+                if (module != null)
+                {
+                    CollectModules(buildData, module);
                 }
             }
 
-            string[] directories = Directory.GetDirectories(directory);
-            foreach(string d in directories)
+            foreach (var module in buildData.ModulesOrderList)
             {
-                FindBuildFiles(d,result);
+                BuildOptions moduleOptions = BuildModule(buildData, module); 
+                foreach (var e in moduleOptions.OutputFiles)
+                            buildData.TargetOptions.LinkEnv.InputFiles.Add(e);
+                foreach (var e in moduleOptions.DependencyFiles)
+                            buildData.TargetOptions.DependencyFiles.Add(e);
+                buildData.TargetOptions.Libraries.AddRange(moduleOptions.Libraries);
             }
+            var outputTargetFilePath = target.GetOutputFilePath(targetBuildOptions);
+            var outputPath = Path.GetDirectoryName(outputTargetFilePath);
+            targetBuildOptions.Toolchain.LinkCPP(buildData, targetBuildOptions, outputTargetFilePath);
         }
+
+        private static BuildOptions BuildModule(BuildData buildData, Module module)
+        {
+            if (buildData.Modules.TryGetValue(module, out var moduleOptions))
+            {
+                BuildModuleInner(buildData, module, moduleOptions);
+            }
+            return moduleOptions;
+        }
+        internal static void BuildModuleInner(BuildData buildData, Module module, BuildOptions moduleOptions, bool withApi = true)
+        {
+            // Inherit build environment from dependent modules
+            foreach (var moduleName in moduleOptions.PrivateDependencies)
+            {
+                var dependencyModule = buildData.Rules.GetModule(moduleName);
+                if (dependencyModule != null && buildData.Modules.TryGetValue(dependencyModule, out var dependencyOptions))
+                {
+                    foreach (var e in dependencyOptions.OutputFiles)
+                        moduleOptions.LinkEnv.InputFiles.Add(e);
+                    foreach (var e in dependencyOptions.DependencyFiles)
+                        moduleOptions.DependencyFiles.Add(e);
+                    foreach (var e in dependencyOptions.OptionalDependencyFiles)
+                        moduleOptions.OptionalDependencyFiles.Add(e);
+                    foreach (var e in dependencyOptions.PublicIncludePaths)
+                        moduleOptions.PrivateIncludePaths.Add(e);
+                    moduleOptions.Libraries.AddRange(dependencyOptions.Libraries);
+                }
+            }
+            foreach (var moduleName in moduleOptions.PublicDependencies)
+            {
+                Console.WriteLine($"The module {moduleName} is a dependency of {module}");
+                Console.WriteLine("");
+                
+                var dependencyModule = buildData.Rules.GetModule(moduleName);
+                if (dependencyModule != null && buildData.Modules.TryGetValue(dependencyModule, out var dependencyOptions))
+                {
+                    foreach (var e in dependencyOptions.OutputFiles)
+                        moduleOptions.LinkEnv.InputFiles.Add(e);
+                    foreach (var e in dependencyOptions.DependencyFiles)
+                        moduleOptions.DependencyFiles.Add(e);
+                    foreach (var e in dependencyOptions.OptionalDependencyFiles)
+                        moduleOptions.OptionalDependencyFiles.Add(e);
+                    foreach (var e in dependencyOptions.PublicIncludePaths)
+                        moduleOptions.PublicIncludePaths.Add(e);
+                    moduleOptions.Libraries.AddRange(dependencyOptions.Libraries);
+                }
+            }
+
+            // Setup actual build environment
+            module.SetUpEnvironment(moduleOptions);
+            moduleOptions.MergeSourcePathsIntoSourceFiles();
+
+            // Collect all files to compile
+            var cppFiles = new List<string>(moduleOptions.SourceFiles.Count / 2);
+            for (int i = 0; i < moduleOptions.SourceFiles.Count; i++)
+            {
+                if (moduleOptions.SourceFiles[i].EndsWith(".cpp", StringComparison.OrdinalIgnoreCase))
+                    cppFiles.Add(moduleOptions.SourceFiles[i]);
+            }
+
+            // Compile all source files
+            var compilationOutput = buildData.Toolchain.CompileCPP(moduleOptions, cppFiles);
+            foreach (var e in compilationOutput.ObjectFiles)
+                moduleOptions.LinkEnv.InputFiles.Add(e);
+            if (buildData.TargetOptions.LinkEnv.GenerateDocumentation)
+            {
+                // TODO: find better way to add generated doc files to the target linker (module exports the output doc files?)
+                buildData.TargetOptions.LinkEnv.DocumentationFiles.AddRange(compilationOutput.DocumentationFiles);
+            }
+            {
+                // Use direct linking of the module object files into the target
+                moduleOptions.OutputFiles.AddRange(compilationOutput.ObjectFiles);
+
+                // Forward the library includes required by this module
+                moduleOptions.OutputFiles.AddRange(moduleOptions.LinkEnv.InputFiles);
+            }
+            
+        }
+
+        private static BuildOptions CollectModules(BuildData buildData, Module module)
+        {
+            if (!buildData.Modules.TryGetValue(module, out var moduleOptions))
+            {
+                var outputPath = Path.Combine(buildData.TargetOptions.IntermediateFolder, module.Name);
+                Directory.CreateDirectory(outputPath);
+                moduleOptions = new BuildOptions
+                {
+                    Target = buildData.Target,
+                    Platform = buildData.Platform,
+                    Toolchain = buildData.Toolchain,
+                    Architecture = buildData.Architecture,
+                    Configuration = buildData.ConfigurationType,
+                    CompileEnv = (CompileEnv)buildData.TargetOptions.CompileEnv.Clone(),
+                    LinkEnv = (LinkEnv)buildData.TargetOptions.LinkEnv.Clone(),
+                    IntermediateFolder = outputPath,
+                    OutputFolder = outputPath,
+                    WorkingDirectory = buildData.TargetOptions.WorkingDirectory,
+                };
+                moduleOptions.SourcePaths.Add(module.FolderPath);
+                module.SetUp(moduleOptions);
+                moduleOptions.MergeSourcePathsIntoSourceFiles();
+
+                foreach (var moduleName in moduleOptions.PrivateDependencies)
+                {
+                    var dependencyModule = buildData.Rules.GetModule(moduleName);
+                    if (dependencyModule != null)
+                    {
+                        var dependencyOptions = CollectModules(buildData, dependencyModule);
+                        foreach (var e in dependencyOptions.PublicDefinitions)
+                            moduleOptions.PrivateDefinitions.Add(e);
+                    } else 
+                    {
+                        throw new Exception($"Missing Module {dependencyModule.Name} referenced by module {module.Name}");
+                    }
+                }
+
+                foreach (var moduleName in moduleOptions.PublicDependencies)
+                {
+                    var dependencyModule = buildData.Rules.GetModule(moduleName);
+                    if (dependencyModule != null)
+                    {
+                        var dependencyOptions = CollectModules(buildData, dependencyModule);
+                        foreach (var e in dependencyOptions.PublicDefinitions)
+                            moduleOptions.PublicDefinitions.Add(e);
+                    } else 
+                    {
+                        Console.WriteLine($"Missing module");
+                        throw new Exception($"Missing Module {dependencyModule.Name} referenced by module {module.Name}");
+                    }
+                }
+                buildData.Modules.Add(module, moduleOptions);
+                buildData.ModulesOrderList.Add(module);
+
+
+            }
+            return moduleOptions;
+        }
+
     }
 }

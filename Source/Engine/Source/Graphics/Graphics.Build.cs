@@ -5,7 +5,7 @@ using JanusBuildTool;
 
 class Graphics : Module
 {
-    public override void Init(BuildOptions options)
+    public override void SetUp(BuildOptions options)
     {
         Console.WriteLine("THIS IS GRAPHICS");
     }

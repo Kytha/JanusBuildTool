@@ -58,10 +58,6 @@ namespace JanusBuildTool
             if(_platforms == null)
             {
                 _platforms = Global.Types.Where(x => x.IsClass && !x.IsAbstract && x.IsSubclassOf(typeof(Platform))).Select(Activator.CreateInstance).Cast<Platform>().ToArray();
-                foreach(var p in _platforms)
-                {
-                    Console.WriteLine(p.Type);
-                }
             }
 
             foreach(var platform in _platforms)
